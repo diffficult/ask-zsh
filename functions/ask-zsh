@@ -1,0 +1,153 @@
+# Function to read key from Fabric config
+function _read_fabric_config() {
+    local key=$1
+    local config_file="${HOME}/.config/fabric/.env"
+    
+    if [[ -f "$config_file" ]]; then
+        local value=$(grep "^${key}=" "$config_file" | cut -d'=' -f2-)
+        # Remove quotes if present
+        value=${value#\"} # Remove leading quote
+        value=${value%\"} # Remove trailing quote
+        value=${value#\'} # Remove leading single quote
+        value=${value%\'} # Remove trailing single quote
+        echo "$value"
+    fi
+}
+
+# Function to get OS-specific system information
+function _get_system_info() {
+    local os_type
+    local system_detail
+    
+    case "$(uname)" in
+        "Darwin")
+            os_type="macOS"
+            local macos_version=$(sw_vers -productVersion)
+            local macos_major_version=${macos_version%%.*}
+            
+            # Map version number to name
+            local macos_name
+            case $macos_major_version in
+                15) macos_name="Ventura" ;;
+                14) macos_name="Sonoma" ;;
+                13) macos_name="Ventura" ;;
+                12) macos_name="Monterey" ;;
+                11) macos_name="Big Sur" ;;
+                10) macos_name="Catalina or earlier" ;;
+            esac
+            
+            system_detail="$os_type $macos_version ($macos_name)"
+            ;;
+        "Linux")
+            if [[ -f /etc/os-release ]]; then
+                os_type=$(source /etc/os-release && echo $ID)
+                os_version=$(source /etc/os-release && echo $VERSION_ID)
+                system_detail="$os_type $os_version"
+            else
+                system_detail="Linux"
+            fi
+            ;;
+        *)
+            system_detail=$(uname)
+            ;;
+    esac
+    
+    echo $system_detail
+}
+
+# Main ask-zsh function
+function ask-zsh() {
+    emulate -L zsh
+    
+    # Check if command argument was provided
+    if [[ $# -eq 0 ]]; then
+        print -P "%F{red}Error:%f No command specified"
+        print "Usage: ask-zsh \"your command here\""
+        return 1
+    fi
+    
+    # Try to get API key from Fabric config first, then environment variable
+    local api_key=$(_read_fabric_config "ANTHROPIC_API_KEY")
+    if [[ -z "$api_key" ]]; then
+        api_key=$CLAUDE_API_KEY
+    fi
+    
+    # Check API key
+    if [[ -z "$api_key" ]]; then
+        print -P "%F{red}Error:%f No API key found."
+        print "Either:"
+        print "1. Set up Fabric config in ~/.config/fabric/.env with ANTHROPIC_API_KEY"
+        print "2. Add CLAUDE_API_KEY to your ~/.zshrc or Prezto config"
+        return 1
+    fi
+    
+    # Validate API key format
+    if [[ ! "$api_key" =~ ^sk-ant- ]]; then
+        print -P "%F{red}Error:%f API key appears to be invalid."
+        print "API key should start with 'sk-ant-'"
+        return 1
+    fi
+    
+    # Try to get model from Fabric config first, then environment variable
+    local model=$(_read_fabric_config "DEFAULT_MODEL")
+    if [[ -z "$model" ]]; then
+        model=$CLAUDE_MODEL
+    fi
+    
+    # Set default model if none specified
+    if [[ -z "$model" ]]; then
+        model="claude-3-sonnet-20240229"
+    fi
+    
+    # Validate model format
+    if [[ ! "$model" =~ ^claude-3- ]]; then
+        print -P "%F{red}Error:%f Model appears to be invalid."
+        print "Model should be something like 'claude-3-sonnet-20240229'"
+        return 1
+    fi
+    
+    local system_detail=$(_get_system_info)
+    local shell_type="zsh"
+    local system_instruction="Return commands suitable for copy/pasting into $shell_type shell on $system_detail. For macOS, use version-appropriate commands (e.g., different DNS flush commands for different versions). For Linux, use distribution-appropriate commands. Do NOT include commentary NOR Markdown triple-backtick code blocks as your whole response will be copied into my terminal automatically. The script should do this: $1"
+    
+    # Make API call to Claude and store response in a file
+    local temp_response=$(mktemp)
+    curl -s \
+        "https://api.anthropic.com/v1/messages" \
+        -H "x-api-key: $api_key" \
+        -H "anthropic-version: 2023-06-01" \
+        -H "content-type: application/json" \
+        -d "{
+            \"model\":\"$model\",
+            \"max_tokens\":1024,
+            \"system\":\"$system_instruction\",
+            \"messages\":[
+                {\"role\":\"user\",\"content\":\"$1\"}
+            ]
+        }" > $temp_response
+    
+    # Extract the command using different jq pattern
+    local cmd=$(jq -r '.content[].text' $temp_response)
+    
+    # Clean up temp file
+    rm -f $temp_response
+    
+    # Handle the command output
+    if [[ -n "$cmd" ]]; then
+        if [[ -o interactive ]]; then
+            # If in interactive shell, print and add to command line
+            print -z "$cmd"
+        else
+            # If not interactive, just print the command
+            print "$cmd"
+        fi
+    else
+        print -P "%F{red}Error:%f No response from API"
+        print -P "%F{blue}Debug:%f Raw API response:"
+        cat $temp_response
+        return 1
+    fi
+}
+
+# Add completion for ask-zsh (optional)
+compdef _command ask-zsh
