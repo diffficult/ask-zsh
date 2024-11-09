@@ -174,10 +174,10 @@ If you encounter any issues:
 
 ## 📊 Stats
 
-![GitHub stars](https://img.shields.io/github/stars/yourusername/ask-zsh?style=social)
-![GitHub forks](https://img.shields.io/github/forks/yourusername/ask-zsh?style=social)
-![GitHub issues](https://img.shields.io/github/issues/yourusername/ask-zsh)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/yourusername/ask-zsh)
+![GitHub stars](https://img.shields.io/github/stars/diffficult/ask-zsh?style=social)
+![GitHub forks](https://img.shields.io/github/forks/diffficult/ask-zsh?style=social)
+![GitHub issues](https://img.shields.io/github/issues/diffficult/ask-zsh)
+![GitHub pull requests](https://img.shields.io/github/issues-pr/diffficult/ask-zsh)
 
 ---
 Made with ❤️ by the command line community
