@@ -2,7 +2,7 @@
 function _read_fabric_config() {
     local key=$1
     local config_file="${HOME}/.config/fabric/.env"
-    
+
     if [[ -f "$config_file" ]]; then
         local value=$(grep "^${key}=" "$config_file" | cut -d'=' -f2-)
         # Remove quotes if present
@@ -18,13 +18,13 @@ function _read_fabric_config() {
 function _get_system_info() {
     local os_type
     local system_detail
-    
+
     case "$(uname)" in
         "Darwin")
             os_type="macOS"
             local macos_version=$(sw_vers -productVersion)
             local macos_major_version=${macos_version%%.*}
-            
+
             # Map version number to name
             local macos_name
             case $macos_major_version in
@@ -35,7 +35,7 @@ function _get_system_info() {
                 11) macos_name="Big Sur" ;;
                 10) macos_name="Catalina or earlier" ;;
             esac
-            
+
             system_detail="$os_type $macos_version ($macos_name)"
             ;;
         "Linux")
@@ -51,27 +51,27 @@ function _get_system_info() {
             system_detail=$(uname)
             ;;
     esac
-    
+
     echo $system_detail
 }
 
 # Main ask-zsh function
 function ask-zsh() {
     emulate -L zsh
-    
+
     # Check if command argument was provided
     if [[ $# -eq 0 ]]; then
         print -P "%F{red}Error:%f No command specified"
         print "Usage: ask-zsh \"your command here\""
         return 1
     fi
-    
+
     # Try to get API key from Fabric config first, then environment variable
     local api_key=$(_read_fabric_config "ANTHROPIC_API_KEY")
     if [[ -z "$api_key" ]]; then
         api_key=$CLAUDE_API_KEY
     fi
-    
+
     # Check API key
     if [[ -z "$api_key" ]]; then
         print -P "%F{red}Error:%f No API key found."
@@ -80,36 +80,39 @@ function ask-zsh() {
         print "2. Add CLAUDE_API_KEY to your ~/.zshrc or Prezto config"
         return 1
     fi
-    
+
     # Validate API key format
     if [[ ! "$api_key" =~ ^sk-ant- ]]; then
         print -P "%F{red}Error:%f API key appears to be invalid."
         print "API key should start with 'sk-ant-'"
         return 1
     fi
-    
-    # Try to get model from Fabric config first, then environment variable
-    local model=$(_read_fabric_config "DEFAULT_MODEL")
-    if [[ -z "$model" ]]; then
-        model=$CLAUDE_MODEL
-    fi
-    
-    # Set default model if none specified
-    if [[ -z "$model" ]]; then
-        model="claude-3-sonnet-20240229"
-    fi
-    
+
+    # # Try to get model from Fabric config first, then environment variable
+    # local model=$(_read_fabric_config "DEFAULT_MODEL")
+    # if [[ -z "$model" ]]; then
+    #     model=$CLAUDE_MODEL
+    # fi
+
+    # # Set default model if none specified
+    # if [[ -z "$model" ]]; then
+    #     model="claude-3-haiku-20240307"
+    # fi
+
+    # Set fixed model
+    local model="claude-3-haiku-20240307"
+
     # Validate model format
     if [[ ! "$model" =~ ^claude-3- ]]; then
         print -P "%F{red}Error:%f Model appears to be invalid."
-        print "Model should be something like 'claude-3-sonnet-20240229'"
+        print "Model should be something like 'claude-3-haiku-20240307'"
         return 1
     fi
-    
+
     local system_detail=$(_get_system_info)
     local shell_type="zsh"
     local system_instruction="Return commands suitable for copy/pasting into $shell_type shell on $system_detail. For macOS, use version-appropriate commands (e.g., different DNS flush commands for different versions). For Linux, use distribution-appropriate commands. Do NOT include commentary NOR Markdown triple-backtick code blocks as your whole response will be copied into my terminal automatically. The script should do this: $1"
-    
+
     # Make API call to Claude and store response in a file
     local temp_response=$(mktemp)
     curl -s \
@@ -125,13 +128,13 @@ function ask-zsh() {
                 {\"role\":\"user\",\"content\":\"$1\"}
             ]
         }" > $temp_response
-    
+
     # Extract the command using different jq pattern
     local cmd=$(jq -r '.content[].text' $temp_response)
-    
+
     # Clean up temp file
     rm -f $temp_response
-    
+
     # Handle the command output
     if [[ -n "$cmd" ]]; then
         if [[ -o interactive ]]; then
